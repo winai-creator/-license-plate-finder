@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบค้นหาและแจ้งป้ายทะเบียนหาย/เก็บได้ (อุทกภัย)</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts Prompt & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+    }
+    .font-plate {
+      font-family: 'Prompt', sans-serif;
+      letter-spacing: 1px;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-blue-600 text-white shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+          <i data-lucide="shield-alert" class="w-7 h-7 text-yellow-300"></i>
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-bold leading-tight flex items-center gap-2">
+            ศูนย์ช่วยเหลือป้ายทะเบียนหล่นหาย
+            <span class="text-xs bg-red-500 text-white font-medium px-2 py-0.5 rounded-full uppercase tracking-wider">ภัยน้ำท่วม</span>
+          </h1>
+          <p class="text-xs md:text-sm text-blue-100">แจ้งพบป้าย • แจ้งป้ายหาย • ปักหมุดพิกัดติดต่อรับคืน</p>
+        </div>
+      </div>
+      
+      <!-- Nav Tabs -->
+      <div class="flex bg-blue-700/60 p-1 rounded-xl backdrop-blur-sm text-sm font-medium w-full md:w-auto justify-center">
+        <button id="tab-explore-btn" onclick="switchTab('explore')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white text-blue-800 shadow-sm transition">
+          <i data-lucide="map-pin" class="w-4 h-4"></i> ค้นหาและแผนที่
+        </button>
+        <button id="tab-found-btn" onclick="switchTab('found')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-white hover:bg-white/10 transition">
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-300"></i> แจ้งเก็บได้
+        </button>
+        <button id="tab-lost-btn" onclick="switchTab('lost')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-white hover:bg-white/10 transition">
+          <i data-lucide="help-circle" class="w-4 h-4 text-rose-300"></i> แจ้งหาย
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-6 flex flex-col gap-5">
+    
+    <!-- Match Alert Banner (Auto-hidden until matched) -->
+    <div id="match-banner" class="hidden bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between animate-bounce">
+      <div class="flex items-center gap-3">
+        <div class="bg-white/20 p-2 rounded-full">
+          <i data-lucide="sparkles" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h4 class="font-bold text-base md:text-lg">ระบบตรวจพบป้ายที่ตรงกัน!</h4>
+          <p class="text-sm text-emerald-50" id="match-banner-text">มีผู้แจ้งเก็บป้ายตรงกับทะเบียนที่คุณกำลังค้นหา</p>
+        </div>
+      </div>
+      <button onclick="document.getElementById('match-banner').classList.add('hidden')" class="text-white/80 hover:text-white p-1">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <!-- TAB 1: EXPLORE & MAP -->
+    <section id="section-explore" class="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+      
+      <!-- Filter & List (Col 5) -->
+      <div class="lg:col-span-5 flex flex-col gap-4">
+        
+        <!-- Search Controls -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3">
+          <div class="relative">
+            <i data-lucide="search" class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input 
+              type="text" 
+              id="search-input" 
+              oninput="handleSearch()"
+              placeholder="ค้นหาเลขทะเบียน เช่น 5240, 2กบ, หรือชื่อผู้แจ้ง..." 
+              class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
+            >
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <select id="filter-type" onchange="handleSearch()" class="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium">
+              <option value="ALL">ทุกสถานะ (เก็บได้ & หาย)</option>
+              <option value="FOUND">🟢 เก็บได้ (รอเจ้าของ)</option>
+              <option value="LOST">🔴 แจ้งตามหา (หาย)</option>
+              <option value="RETURNED">🔵 ส่งคืนแล้ว</option>
+            </select>
+
+            <select id="filter-province" onchange="handleSearch()" class="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium">
+              <option value="ALL">ทุกจังหวัด</option>
+              <option value="ชลบุรี">ชลบุรี</option>
+              <option value="กรุงเทพมหานคร">กรุงเทพมหานคร</option>
+              <option value="เชียงใหม่">เชียงใหม่</option>
+              <option value="เชียงราย">เชียงราย</option>
+              <option value="พระนครศรีอยุธยา">พระนครศรีอยุธยา</option>
+              <option value="อุบลราชธานี">อุบลราชธานี</option>
+              <option value="สุโขทัย">สุโขทัย</option>
+              <option value="สงขลา">สงขลา</option>
+            </select>
+          </div>
+
+          <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+            <span id="results-count">พบ 0 รายการ</span>
+            <div class="flex items-center gap-2">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> เจอ/เก็บได้</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> ป้ายหาย</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cards List -->
+        <div id="plates-container" class="space-y-3 overflow-y-auto max-h-[620px] pr-1 custom-scroll">
+          <!-- Dynamic Cards will be rendered here -->
+        </div>
+      </div>
+
+      <!-- Map View (Col 7) -->
+      <div class="lg:col-span-7 flex flex-col h-[500px] lg:h-auto min-h-[480px]">
+        <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex-1 flex flex-col relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2 px-1">
+            <h3 class="font-semibold text-slate-700 text-sm flex items-center gap-1.5">
+              <i data-lucide="map" class="w-4 h-4 text-blue-600"></i> แผนที่ตำแหน่งจุดรับคืน / จุดทำหล่น
+            </h3>
+            <span class="text-xs text-slate-400">คลิกที่หมุดเพื่อดูข้อมูลติดต่อและเส้นทาง</span>
+          </div>
+          <div id="main-map" class="w-full flex-1 rounded-xl z-0 border border-slate-200"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2 & 3: FORM SUBMIT (LOST / FOUND) -->
+    <section id="section-form" class="hidden max-w-2xl mx-auto w-full">
+      <div class="bg-white rounded-2xl shadow-md border border-slate-100 p-5 md:p-7">
+        <div class="flex items-center gap-3 border-b border-slate-100 pb-4 mb-5">
+          <div id="form-icon-container" class="p-3 rounded-xl bg-emerald-50 text-emerald-600">
+            <i data-lucide="plus-circle" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h2 id="form-title" class="text-lg font-bold text-slate-800">แจ้งพบป้ายทะเบียน (เก็บได้)</h2>
+            <p id="form-subtitle" class="text-xs text-slate-500">กรอกข้อมูลเพื่อช่วยส่งคืนเจ้าของรถที่เดือดร้อน</p>
+          </div>
+        </div>
+
+        <form id="plate-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
+          <input type="hidden" id="entry-type" value="FOUND">
+
+          <!-- Type Selector Preview -->
+          <div class="grid grid-cols-2 gap-3 p-1 bg-slate-100 rounded-xl text-sm font-semibold">
+            <button type="button" onclick="setFormType('FOUND')" id="btn-set-found" class="py-2 rounded-lg bg-emerald-600 text-white shadow-sm transition">
+              🟢 ฉันเก็บป้ายได้ (รอคืน)
+            </button>
+            <button type="button" onclick="setFormType('LOST')" id="btn-set-lost" class="py-2 rounded-lg text-slate-600 hover:bg-white/50 transition">
+              🔴 ฉันทำป้ายหล่นหาย
+            </button>
+          </div>
+
+          <!-- Plate Preview Widget -->
+          <div class="flex justify-center my-3">
+            <div id="plate-preview-box" class="w-64 border-4 border-slate-700 bg-white rounded-xl shadow-md p-3 text-center flex flex-col justify-center items-center relative">
+              <span class="text-[10px] text-slate-400 absolute top-1 right-2">ขส</span>
+              <div id="prev-letters" class="text-2xl font-bold tracking-wider text-slate-900">2กบ</div>
+              <div id="prev-province" class="text-sm font-semibold text-slate-700">ชลบุรี</div>
+              <div id="prev-numbers" class="text-3xl font-extrabold tracking-widest text-slate-900">5240</div>
+            </div>
+          </div>
+
+          <!-- License Plate Details -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">หมวดอักษรหน้า <span class="text-red-500">*</span></label>
+              <input type="text" id="form-prefix" required placeholder="เช่น 2กบ, กข" oninput="updatePlatePreview()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">เลขทะเบียน <span class="text-red-500">*</span></label>
+              <input type="text" id="form-number" required placeholder="เช่น 5240" oninput="updatePlatePreview()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">จังหวัดบนป้าย <span class="text-red-500">*</span></label>
+              <input type="text" id="form-province" required placeholder="เช่น ชลบุรี" oninput="updatePlatePreview()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <!-- Vehicle Type -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">ประเภทรถ</label>
+              <select id="form-vehicle-type" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl">
+                <option value="MOTORCYCLE">รถจักรยานยนต์ (มอเตอร์ไซค์)</option>
+                <option value="CAR">รถยนต์นั่งส่วนบุคคล</option>
+                <option value="PICKUP">รถกระบะ / รถบรรทุก</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">ชื่อผู้แจ้ง/จุดรับฝาก <span class="text-red-500">*</span></label>
+              <input type="text" id="form-contact-name" required placeholder="เช่น สมศรี (พ่อใหญ่สมศรี)" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl">
+            </div>
+          </div>
+
+          <!-- Contact details -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">เบอร์โทรติดต่อ <span class="text-red-500">*</span></label>
+              <input type="tel" id="form-contact-phone" required placeholder="เช่น 081-xxx-xxxx" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">ลิงก์ Google Maps (ถ้ามี)</label>
+              <input type="url" id="form-gmap-link" placeholder="เช่น https://maps.app.goo.gl/..." class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl">
+            </div>
+          </div>
+
+          <!-- Details & Address -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">รายละเอียดจุดรับคืน / บริเวณที่พบหรือทำตก <span class="text-red-500">*</span></label>
+            <textarea id="form-location-text" rows="2" required placeholder="เช่น ทะเบียนรถใครหล่นหายมาเอาเด้อ บ้านพ่อใหญ่สมศรี ซอย..." class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl"></textarea>
+          </div>
+
+          <!-- Map Pin Picker -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-blue-600"></i> คลิกบนแผนที่เพื่อระบุพิกัด
+              </label>
+              <button type="button" onclick="getCurrentLocation()" class="text-[11px] text-blue-600 font-semibold hover:underline flex items-center gap-1">
+                <i data-lucide="navigation" class="w-3 h-3"></i> ใช้ตำแหน่งปัจจุบันของฉัน
+              </button>
+            </div>
+            <div id="picker-map" class="h-44 rounded-xl border border-slate-200"></div>
+            <div class="flex gap-3 text-[11px] text-slate-400 mt-1">
+              <span>ละติจูด: <b id="lbl-lat" class="text-slate-600">13.1147</b></span>
+              <span>ลองจิจูด: <b id="lbl-lng" class="text-slate-600">101.1275</b></span>
+            </div>
+          </div>
+
+          <div class="pt-3 flex gap-2">
+            <button type="button" onclick="switchTab('explore')" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-100 transition">
+              ยกเลิก
+            </button>
+            <button type="submit" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md transition flex items-center justify-center gap-1.5">
+              <i data-lucide="save" class="w-4 h-4"></i> บันทึกข้อมูล
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal View Details -->
+  <div id="detail-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95">
+      <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+
+      <div id="modal-content">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Initial Dataset with Somsri's License Plate Example ---
+    const INITIAL_PLATES = [
+      {
+        id: "sample-somsri-5240",
+        type: "FOUND", // เก็บได้
+        vehicleType: "MOTORCYCLE",
+        prefix: "2กบ",
+        number: "5240",
+        province: "ชลบุรี",
+        contactName: "สมศรี ประทุมชัย (พ่อใหญ่สมศรี)",
+        contactPhone: "081-xxx-xxxx",
+        gmapLink: "https://maps.app.goo.gl/wnWKpQL1XuQFi7UC6",
+        locationDetail: "ทะเบียนรถใครหล่นหายมาเอาเด้อ บ้านพ่อใหญ่สมศรี (เก็บได้ช่วงน้ำท่วม)",
+        lat: 13.1147,
+        lng: 101.1275,
+        status: "WAITING", // WAITING, RETURNED
+        createdAt: "2024-10-25 17:39 น."
+      },
+      {
+        id: "sample-lost-ayutthaya",
+        type: "LOST", // แจ้งหาย
+        vehicleType: "CAR",
+        prefix: "กข",
+        number: "9988",
+        province: "พระนครศรีอยุธยา",
+        contactName: "คุณชัยวัฒน์",
+        contactPhone: "089-112-3344",
+        gmapLink: "",
+        locationDetail: "ขับลุยน้ำบริเวณแยกวัดตูม ป้ายหน้าหลุดหาย รบกวนใครพบติดต่อกลับมีสินน้ำใจให้ครับ",
+        lat: 14.3532,
+        lng: 100.5684,
+        status: "WAITING",
+        createdAt: "2024-10-24 10:15 น."
+      }
+    ];
+
+    // Local Storage or Defaults
+    let plates = JSON.parse(localStorage.getItem('flood_plates_data')) || INITIAL_PLATES;
+
+    // Map instances
+    let mainMap, pickerMap;
+    let mainMarkers = [];
+    let pickerMarker;
+    let selectedCoords = { lat: 13.1147, lng: 101.1275 };
+
+    // --- Tab Switching ---
+    function switchTab(tab) {
+      const exploreBtn = document.getElementById('tab-explore-btn');
+      const foundBtn = document.getElementById('tab-found-btn');
+      const lostBtn = document.getElementById('tab-lost-btn');
+      const sectionExplore = document.getElementById('section-explore');
+      const sectionForm = document.getElementById('section-form');
+
+      [exploreBtn, foundBtn, lostBtn].forEach(btn => {
+        btn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-white hover:bg-white/10 transition";
+      });
+
+      if (tab === 'explore') {
+        exploreBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white text-blue-800 shadow-sm transition";
+        sectionExplore.classList.remove('hidden');
+        sectionForm.classList.add('hidden');
+        setTimeout(() => mainMap.invalidateSize(), 200);
+      } else {
+        sectionExplore.classList.add('hidden');
+        sectionForm.classList.remove('hidden');
+        if (tab === 'found') {
+          foundBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white text-blue-800 shadow-sm transition";
+          setFormType('FOUND');
+        } else {
+          lostBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white text-blue-800 shadow-sm transition";
+          setFormType('LOST');
+        }
+        setTimeout(() => pickerMap.invalidateSize(), 200);
+      }
+    }
+
+    function setFormType(type) {
+      document.getElementById('entry-type').value = type;
+      const btnFound = document.getElementById('btn-set-found');
+      const btnLost = document.getElementById('btn-set-lost');
+      const formTitle = document.getElementById('form-title');
+      const formSubtitle = document.getElementById('form-subtitle');
+      const iconContainer = document.getElementById('form-icon-container');
+
+      if (type === 'FOUND') {
+        btnFound.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-sm transition";
+        btnLost.className = "py-2 rounded-lg text-slate-600 hover:bg-white/50 transition";
+        formTitle.textContent = "แจ้งพบป้ายทะเบียน (เก็บได้)";
+        formSubtitle.textContent = "กรอกข้อมูลเพื่อช่วยส่งคืนเจ้าของรถที่เดือดร้อน";
+        iconContainer.className = "p-3 rounded-xl bg-emerald-50 text-emerald-600";
+      } else {
+        btnLost.className = "py-2 rounded-lg bg-rose-600 text-white shadow-sm transition";
+        btnFound.className = "py-2 rounded-lg text-slate-600 hover:bg-white/50 transition";
+        formTitle.textContent = "แจ้งตามหาป้ายทะเบียนหล่นหาย";
+        formSubtitle.textContent = "กรอกข้อมูลจุดที่น้ำท่วมหรือคาดว่าป้ายหลุดหาย";
+        iconContainer.className = "p-3 rounded-xl bg-rose-50 text-rose-600";
+      }
+    }
+
+    function updatePlatePreview() {
+      const prefix = document.getElementById('form-prefix').value.trim() || "2กบ";
+      const number = document.getElementById('form-number').value.trim() || "5240";
+      const prov = document.getElementById('form-province').value.trim() || "ชลบุรี";
+
+      document.getElementById('prev-letters').textContent = prefix;
+      document.getElementById('prev-numbers').textContent = number;
+      document.getElementById('prev-province').textContent = prov;
+    }
+
+    // --- Maps Setup ---
+    function initMaps() {
+      // Main Explorer Map
+      mainMap = L.map('main-map').setView([13.1147, 101.1275], 8);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(mainMap);
+
+      // Form Location Picker Map
+      pickerMap = L.map('picker-map').setView([13.1147, 101.1275], 9);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(pickerMap);
+
+      pickerMarker = L.marker([13.1147, 101.1275], { draggable: true }).addTo(pickerMap);
+
+      pickerMarker.on('dragend', function (e) {
+        const pos = e.target.getLatLng();
+        setCoords(pos.lat, pos.lng);
+      });
+
+      pickerMap.on('click', function(e) {
+        pickerMarker.setLatLng(e.latlng);
+        setCoords(e.latlng.lat, e.latlng.lng);
+      });
+    }
+
+    function setCoords(lat, lng) {
+      selectedCoords = { lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
+      document.getElementById('lbl-lat').textContent = selectedCoords.lat;
+      document.getElementById('lbl-lng').textContent = selectedCoords.lng;
+    }
+
+    function getCurrentLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            pickerMap.setView([latitude, longitude], 14);
+            pickerMarker.setLatLng([latitude, longitude]);
+            setCoords(latitude, longitude);
+          },
+          (err) => alert("ไม่สามารถดึงตำแหน่งพิกัดได้: " + err.message)
+        );
+      }
+    }
+
+    // --- Render Plates Cards & Map Markers ---
+    function renderPlates(filteredList) {
+      const container = document.getElementById('plates-container');
+      const countEl = document.getElementById('results-count');
+      container.innerHTML = '';
+      countEl.textContent = `พบ ${filteredList.length} รายการ`;
+
+      // Clear map markers
+      mainMarkers.forEach(m => mainMap.removeLayer(m));
+      mainMarkers = [];
+
+      if (filteredList.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-100">
+            <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-2 text-slate-300"></i>
+            <p class="font-medium">ไม่พบข้อมูลป้ายทะเบียนที่ตรงกัน</p>
+            <p class="text-xs text-slate-400 mt-1">ลองค้นหาด้วยคำค้นอื่น หรือกดปุ่มแจ้งเพื่อเพิ่มข้อมูล</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      const bounds = [];
+
+      filteredList.forEach(item => {
+        const isFound = item.type === 'FOUND';
+        const isReturned = item.status === 'RETURNED';
+
+        // Badge color
+        let tagBg = isFound ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
+        let tagText = isFound ? '🟢 เก็บได้ (รอส่งคืน)' : '🔴 แจ้งตามหา (ป้ายหาย)';
+        if (isReturned) {
+          tagBg = 'bg-blue-100 text-blue-800 border-blue-200';
+          tagText = '🔵 ส่งคืนเจ้าของแล้ว';
+        }
+
+        const card = document.createElement('div');
+        card.className = "bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition cursor-pointer flex flex-col gap-3";
+        card.onclick = () => openDetails(item.id);
+
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-3">
+            <!-- Plate Simulated Graphic -->
+            <div class="w-28 shrink-0 bg-white border-2 border-slate-700 rounded-lg p-1.5 text-center shadow-sm">
+              <div class="text-[11px] font-bold text-slate-900 leading-tight">${item.prefix}</div>
+              <div class="text-[9px] text-slate-600 leading-tight">${item.province}</div>
+              <div class="text-lg font-black text-slate-950 leading-tight font-mono">${item.number}</div>
+            </div>
+
+            <!-- Plate Details -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap mb-1">
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full border ${tagBg}">${tagText}</span>
+                <span class="text-[11px] text-slate-400">${item.vehicleType === 'MOTORCYCLE' ? 'มอเตอร์ไซค์' : 'รถยนต์'}</span>
+              </div>
+              <h4 class="font-bold text-slate-800 text-sm truncate flex items-center gap-1.5">
+                <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i> ${item.contactName}
+              </h4>
+              <p class="text-xs text-slate-500 line-clamp-2 mt-1">${item.locationDetail}</p>
+            </div>
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-100 text-slate-500">
+            <span class="flex items-center gap-1">
+              <i data-lucide="calendar" class="w-3 h-3 text-slate-400"></i> ${item.createdAt}
+            </span>
+            <div class="flex items-center gap-2">
+              ${item.gmapLink ? `
+                <a href="${item.gmapLink}" target="_blank" onclick="event.stopPropagation()" class="text-blue-600 hover:underline flex items-center gap-0.5 font-medium">
+                  <i data-lucide="map-pin" class="w-3 h-3"></i> แผนที่ Google
+                </a>
+              ` : ''}
+              <button class="text-blue-600 font-semibold hover:underline">ดูรายละเอียด &gt;</button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+
+        // Add Marker on Leaflet Map
+        if (item.lat && item.lng) {
+          bounds.push([item.lat, item.lng]);
+          const markerColor = isReturned ? '#2563eb' : (isFound ? '#10b981' : '#f43f5e');
+          
+          const customIcon = L.divIcon({
+            className: 'custom-pin',
+            html: `
+              <div style="background-color: ${markerColor}; color: white; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2.5px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                ${item.prefix ? item.prefix.substring(0, 3) : 'ป้าย'}
+              </div>
+            `,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+          });
+
+          const marker = L.marker([item.lat, item.lng], { icon: customIcon }).addTo(mainMap);
+          marker.bindPopup(`
+            <div class="p-1 font-sans text-xs">
+              <b style="color:${markerColor}">${tagText}</b>
+              <div class="font-bold text-base my-0.5">${item.prefix} ${item.number} ${item.province}</div>
+              <p class="text-gray-600 mb-1">${item.locationDetail}</p>
+              <div class="text-gray-700"><b>ติดต่อ:</b> ${item.contactName} (${item.contactPhone})</div>
+              ${item.gmapLink ? `<a href="${item.gmapLink}" target="_blank" style="color: #2563eb; display: block; margin-top: 4px; font-weight: bold;">📍 เปิดใน Google Maps นำทาง</a>` : ''}
+            </div>
+          `);
+          mainMarkers.push(marker);
+        }
+      });
+
+      if (bounds.length > 0) {
+        mainMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }
+
+      lucide.createIcons();
+    }
+
+    // --- Search & Filter Logic ---
+    function handleSearch() {
+      const query = document.getElementById('search-input').value.toLowerCase().trim();
+      const type = document.getElementById('filter-type').value;
+      const prov = document.getElementById('filter-province').value;
+
+      const filtered = plates.filter(item => {
+        const matchesQuery = 
+          item.number.toLowerCase().includes(query) ||
+          item.prefix.toLowerCase().includes(query) ||
+          item.province.toLowerCase().includes(query) ||
+          item.contactName.toLowerCase().includes(query) ||
+          item.locationDetail.toLowerCase().includes(query);
+
+        const matchesType = (type === 'ALL') || 
+                            (type === 'RETURNED' && item.status === 'RETURNED') ||
+                            (type !== 'RETURNED' && item.type === type && item.status !== 'RETURNED');
+
+        const matchesProv = (prov === 'ALL') || (item.province === prov);
+
+        return matchesQuery && matchesType && matchesProv;
+      });
+
+      renderPlates(filtered);
+      checkForMatches(query);
+    }
+
+    // Intelligent Match detection
+    function checkForMatches(query) {
+      if (!query || query.length < 3) {
+        document.getElementById('match-banner').classList.add('hidden');
+        return;
+      }
+
+      const matchFound = plates.find(p => p.type === 'FOUND' && p.number.includes(query));
+      const matchLost = plates.find(p => p.type === 'LOST' && p.number.includes(query));
+
+      if (matchFound && matchLost) {
+        document.getElementById('match-banner').classList.remove('hidden');
+        document.getElementById('match-banner-text').textContent = 
+          `ตรงกัน! ป้ายทะเบียน ${matchFound.prefix} ${matchFound.number} มีทั้งผู้แจ้งหาย และผู้เก็บได้แล้วในระบบ`;
+      }
+    }
+
+    // --- Form Submission ---
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const type = document.getElementById('entry-type').value;
+      const prefix = document.getElementById('form-prefix').value.trim();
+      const number = document.getElementById('form-number').value.trim();
+      const province = document.getElementById('form-province').value.trim();
+      const vehicleType = document.getElementById('form-vehicle-type').value;
+      const contactName = document.getElementById('form-contact-name').value.trim();
+      const contactPhone = document.getElementById('form-contact-phone').value.trim();
+      const gmapLink = document.getElementById('form-gmap-link').value.trim();
+      const locationDetail = document.getElementById('form-location-text').value.trim();
+
+      const newEntry = {
+        id: "plate-" + Date.now(),
+        type,
+        vehicleType,
+        prefix,
+        number,
+        province,
+        contactName,
+        contactPhone,
+        gmapLink,
+        locationDetail,
+        lat: selectedCoords.lat,
+        lng: selectedCoords.lng,
+        status: "WAITING",
+        createdAt: "เพิ่งแจ้งเมื่อสักครู่"
+      };
+
+      plates.unshift(newEntry);
+      localStorage.setItem('flood_plates_data', JSON.stringify(plates));
+
+      alert("บันทึกข้อมูลเรียบร้อยแล้ว! ขอขอบคุณที่ร่วมเป็นสะพานบุญส่งคืนป้ายครับ");
+      document.getElementById('plate-form').reset();
+      switchTab('explore');
+      handleSearch();
+    }
+
+    // --- Details Modal ---
+    function openDetails(id) {
+      const item = plates.find(p => p.id === id);
+      if (!item) return;
+
+      const isFound = item.type === 'FOUND';
+      const isReturned = item.status === 'RETURNED';
+
+      let statusBadge = isFound ? '🟢 เก็บป้ายได้ (รอเจ้าของรับคืน)' : '🔴 ตามหาป้าย (เจ้าของแจ้งหาย)';
+      if (isReturned) statusBadge = '🔵 ส่งมอบคืนเจ้าของเรียบร้อยแล้ว';
+
+      const content = document.getElementById('modal-content');
+      content.innerHTML = `
+        <div class="text-center mb-4">
+          <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full ${isFound ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'} mb-2">
+            ${statusBadge}
+          </span>
+          
+          <!-- Graphic Plate Preview inside Modal -->
+          <div class="w-48 mx-auto border-4 border-slate-800 bg-white rounded-xl shadow-md p-3 my-2 text-center">
+            <div class="text-xl font-bold tracking-wider text-slate-900">${item.prefix}</div>
+            <div class="text-xs font-semibold text-slate-700">${item.province}</div>
+            <div class="text-3xl font-extrabold tracking-widest text-slate-950">${item.number}</div>
+          </div>
+        </div>
+
+        <div class="space-y-3 text-sm text-slate-700">
+          <div class="p-3 bg-slate-50 rounded-xl">
+            <b class="text-slate-900 block text-xs mb-1">จุดรับคืน / รายละเอียดพิกัด:</b>
+            <p class="text-slate-600 leading-relaxed">${item.locationDetail}</p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="p-2.5 bg-slate-50 rounded-xl">
+              <span class="text-slate-400 block">ผู้ติดต่อ / เจ้าของ:</span>
+              <b class="text-slate-800 text-sm">${item.contactName}</b>
+            </div>
+            <div class="p-2.5 bg-slate-50 rounded-xl">
+              <span class="text-slate-400 block">เบอร์โทรศัพท์:</span>
+              <a href="tel:${item.contactPhone}" class="text-blue-600 font-bold text-sm hover:underline">${item.contactPhone}</a>
+            </div>
+          </div>
+
+          ${item.gmapLink ? `
+            <a href="${item.gmapLink}" target="_blank" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 shadow-sm transition">
+              <i data-lucide="navigation" class="w-4 h-4"></i> เปิด Google Maps นำทางไปจุดนี้
+            </a>
+          ` : ''}
+
+          <div class="pt-2 flex gap-2">
+            <button onclick="toggleReturnedStatus('${item.id}')" class="flex-1 py-2 text-xs font-semibold rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 transition">
+              ${isReturned ? 'เปลี่ยนเป็น: ยังไม่คืน' : 'ทำเครื่องหมายว่า: ส่งคืนแล้ว'}
+            </button>
+            <button onclick="shareLink('${item.id}', '${item.prefix} ${item.number}')" class="p-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100">
+              <i data-lucide="share-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('detail-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeModal() {
+      document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    function toggleReturnedStatus(id) {
+      const idx = plates.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        plates[idx].status = plates[idx].status === 'RETURNED' ? 'WAITING' : 'RETURNED';
+        localStorage.setItem('flood_plates_data', JSON.stringify(plates));
+        closeModal();
+        handleSearch();
+      }
+    }
+
+    function shareLink(id, plateTitle) {
+      const text = `แจ้งเบาะแสป้ายทะเบียนน้ำท่วม: ${plateTitle} ตรวจสอบพิกัดและติดต่อรับคืนได้ที่เว็บ`;
+      if (navigator.share) {
+        navigator.share({ title: 'ป้ายทะเบียนน้ำท่วม', text: text, url: window.location.href });
+      } else {
+        navigator.clipboard.writeText(text + " " + window.location.href);
+        alert("คัดลอกข้อความสำหรับแชร์เรียบร้อยแล้ว!");
+      }
+    }
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      initMaps();
+      handleSearch();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
